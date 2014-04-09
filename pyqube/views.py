@@ -34,6 +34,17 @@ class Schema(object):
         '''
         return self.views[view]
         
+    def viewByName(self, name):
+        for v in self.views.iterkeys():
+            if v.name == name:
+                return v
+        return None
+        
+    def attrByName(self, fullName):
+        pair = fullName.split('.')
+        view = self.viewByName(pair[0])
+        return view.attribute(pair[1])
+        
     def relation(self, view, related):
         '''
             Finds object representing relation between two views.
@@ -47,6 +58,14 @@ class Schema(object):
         elif self.rels.has_key((related, view)):
             return self.rels[(related, view)]
         return None
+        
+    def attributes(self):
+        attrs = []
+        for v in self.views.iterkeys():
+            for a in v.viewAttrs():
+                attrs.append(v.name+'.'+a)
+        attrs.sort()
+        return attrs
         
 class ViewAttr(object):
     '''
@@ -85,6 +104,9 @@ class ViewAttr(object):
             
     def toString(self, alias):
         return self._prepareStr(alias)
+     
+    def realName(self):
+        return self.name
         
         
 class SelectAttr(ViewAttr):
@@ -116,11 +138,12 @@ class SelectAttr(ViewAttr):
         if self.altName:
             base += ' as '+self.altName
         return base
-        
+    
     def realName(self):
         if self.altName:
             return self.altName
         return self.name
+        
 
 class IView(object):
 
@@ -142,7 +165,9 @@ class IView(object):
             In default implemention this method raise an exception
         '''
         raise Exception('Not implemented')
-    
+        
+    def viewAttrs(self):
+        raise Exception('Not implemented')
         
 class View(IView):
     '''
@@ -179,6 +204,9 @@ class View(IView):
         
     def __repr__(self):
         return self._src
+        
+    def viewAttrs(self):
+        return [a.realName() for (n, a) in self.attrs.iteritems()]
 
 class Condition(object):
     '''

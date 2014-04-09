@@ -39,6 +39,13 @@ class Matrix(object):
         else:
             return column.get(r, None)
     
+    def cellValue(self, r, c):
+        column = self._columns.get(c, {})
+        if r in [2, 3]:
+            return column.get(r, False)
+        else:
+            return column.get(r, None)
+    
     @property
     def rowCount(self):
         return self._rowCount
@@ -50,7 +57,7 @@ class Matrix(object):
 
 class EditorTableModel(core.QAbstractTableModel):
 
-    def __init__(self, schema):
+    def __init__(self, schema ):
         core.QAbstractTableModel.__init__(self)
         self.schema = schema
         self.matrix = Matrix()
@@ -86,6 +93,45 @@ class EditorTableModel(core.QAbstractTableModel):
         self.endResetModel()
         self.dataChanged.emit(index, index)
         return True
+
+class AttributesDelegate(gui.QStyledItemDelegate):
+
+    def __init__(self, schema, tableView):
+        gui.QStyledItemDelegate.__init__(self, parent=tableView)
+        self.setItemEditorFactory(gui.QItemEditorFactory.defaultFactory())
+        self.schema = schema
+        self.matrix = tableView.model().matrix
+        
+    def _attrs(self):
+        selected = set([])
+        for c in range(self.matrix.columnCount):
+            a = self.matrix.cellValue(0, c)
+            #print a
+            if a:
+                sv = unicode(a)
+                attr = self.schema.attrByName(sv)
+                #print attr.view.source
+                for view in self.schema.relatedViews(attr.view):
+                    #print 'R', view.source
+                    selected = selected | set([view.name+'.'+x for x in view.viewAttrs() ])
+        if selected:
+            print selected
+            return list(selected)
+        else:
+            return self.schema.attributes()
+        
+    def createEditor(self, parent, style, index):
+        self.initStyleOption(style, index)
+        textField = gui.QLineEdit(parent)
+        textField.setCompleter(gui.QCompleter(self._attrs()))
+        return textField
+        
+    def setEditorData(self, editor, index):
+        value = index.data().toString()
+        editor.setText(value)
+    
+    def setModelData(self, editor, model, index):
+        model.setData(index, core.QVariant(unicode(editor.text())))
         
 class QtQube(gui.QWidget):
     
@@ -96,6 +142,7 @@ class QtQube(gui.QWidget):
         self.layout().addWidget(tableView)
         model = EditorTableModel(schema)
         tableView.setModel(model)
+        tableView.setItemDelegateForRow(0, AttributesDelegate(schema, tableView))
         tableView.horizontalHeader().setResizeMode(gui.QHeaderView.Stretch)
 
 def createSchema():
