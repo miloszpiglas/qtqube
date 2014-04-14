@@ -62,9 +62,8 @@ class Schema(object):
     def attributes(self):
         attrs = []
         for v in self.views.iterkeys():
-            for a in v.viewAttrs():
-                attrs.append(v.name+'.'+a)
-        attrs.sort()
+            attrs.extend(v.viewAttrs())
+        attrs.sort(cmp=lambda x,y: cmp(x.view.name+'.'+x.realName(), y.view.name+'.'+y.realName()))
         return attrs
         
 class ViewAttr(object):
@@ -95,9 +94,6 @@ class ViewAttr(object):
         sa.aggregate = aggregate
         sa.altName = altName
         return sa
-        
-    def __str__(self):
-        return '%s.%s'%(self.view.name, self.name)
     
     def _prepareStr(self, alias):
         return '%s.%s' % (alias, self.name)
@@ -107,6 +103,9 @@ class ViewAttr(object):
      
     def realName(self):
         return self.name
+        
+    def fullName(self):
+        return self.view.name+'.'+self.realName()
         
         
 class SelectAttr(ViewAttr):
@@ -122,19 +121,11 @@ class SelectAttr(ViewAttr):
         self.condition = None
         self.aggregate=None
         self.altName = None
-        
-    def __str__(self):
-        if self.aggregate:
-            return str(self.aggregate(ViewAttr.__str__(self)))
-        return ViewAttr.__str__(self)
-        
-    def __repr__(self):
-        return str(self)
     
     def _prepareStr(self, alias):
         base = ViewAttr._prepareStr(self, alias)
         if self.aggregate:
-            base = str(self.aggregate(base))
+            base = self.aggregate(base)
         if self.altName:
             base += ' as '+self.altName
         return base
@@ -199,14 +190,8 @@ class View(IView):
     def source(self):
         return self._src
         
-    def __str__(self):
-        return self._src
-        
-    def __repr__(self):
-        return self._src
-        
     def viewAttrs(self):
-        return [a.realName() for (n, a) in self.attrs.iteritems()]
+        return self.attrs.itervalues()
 
 class Condition(object):
     '''
@@ -296,23 +281,6 @@ class ConditionChain(object):
         
     def build(self):
         return self.cond
-            
-class Aggregate(object):
-    '''
-        Aggregation function.
-    '''
-    def __init__(self, name, attr):
-        '''
-            Initialise aggregation function
-            params:
-                - name: function's name
-                - attr: SelectAttribute used with this funcion
-        '''
-        self.name = name
-        self.attr = attr
-        
-    def __str__(self):
-        return '%s( %s )' % (self.name, self.attr)
         
 class Relation(object):
     '''
@@ -336,9 +304,6 @@ class Relation(object):
             Creates string representation of relation used in JOIN part of query.
         '''
         return ' AND '.join([p.toString(vleft, vright) for p in self.pairs])
-        
-    def __str__(self):
-        return '%s %s' %(self.pairs[0].left, self.pairs[0].right)
         
 class AttrPair(object):
 

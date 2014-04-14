@@ -5,6 +5,7 @@ from PyQt4 import QtGui as gui
 from pyqube import pyqube as p
 from pyqube import views as v
 
+
 class Matrix(object):
 
     def __init__(self):
@@ -22,7 +23,7 @@ class Matrix(object):
     def setValue(self, index, value):
         r, c = index.row(), index.column()
         column = self._columns.get(c, {})
-        column[r] = value.toString()
+        column[r] = value
         self._columns[c] = column
         print self._columns
         if r >= self._rowCount-1:
@@ -33,11 +34,7 @@ class Matrix(object):
             
     def value(self, index):
         r, c = index.row(), index.column()
-        column = self._columns.get(c, {})
-        if r in [2, 3]:
-            return column.get(r, False)
-        else:
-            return column.get(r, None)
+        return self.cellValue(r, c)
     
     def cellValue(self, r, c):
         column = self._columns.get(c, {})
@@ -53,14 +50,70 @@ class Matrix(object):
     @property    
     def columnCount(self):
         return self._columnCount     
+
+class ValueConverter(object):
+
+    def fromInput(self, text):
+        return text
+        
+    def toOutput(self, value):
+        return value
+        
+class AttrConverter(ValueConverter):
+
+    def __init__(self, schema):
+        ValueConverter.__init__(self)
+        self.schema = schema
+        
+    def fromInput(self, text):
+        print text
+        return self.schema.attrByName(str(text))
+        
+    def toOutput(self, value):
+        if value and isinstance(value, v.ViewAttr):
+            return value.fullName()    
+        elif value:
+            return value
+        else:
+            return None
+        
+class BoolConverter(ValueConverter):
     
+    def __init__(self):
+        ValueConverter.__init__(self)
+        
+    def fromInput(self, variant):
+        return variant.toBool()
+        
+    def toOutput(self, value):
+        return value
+        
+class StrConverter(ValueConverter):
+    
+    def __init__(self):
+        ValueConverter.__init__(self)
+        
+    def fromInput(self, variant):
+        return str(variant.toString())
+        
+    def toOutput(self, value):
+        return value 
 
 class EditorTableModel(core.QAbstractTableModel):
 
-    def __init__(self, schema ):
+    def __init__(self, schema, matrix ):
         core.QAbstractTableModel.__init__(self)
         self.schema = schema
-        self.matrix = Matrix()
+        self.matrix = matrix
+        strc = StrConverter()
+        boolc = BoolConverter()
+        self.converters = {0:AttrConverter(self.schema), 1:strc, 2:boolc, 3:boolc, 4:strc, 5:strc, 6:strc }
+    
+    def _converter(self, row):
+        if row < 7:
+            return self.converters[row]
+        else:
+            return self.converters[6]
     
     def flags(self,indeks):
         return core.Qt.ItemIsEnabled | core.Qt.ItemIsEditable | core.Qt.ItemIsSelectable
@@ -82,14 +135,14 @@ class EditorTableModel(core.QAbstractTableModel):
     def data(self, index, role=core.Qt.DisplayRole):
         v = self.matrix.value(index)
         if role == core.Qt.DisplayRole:
-            return v
+            return self._converter(index.row()).toOutput(v)
         elif role == core.Qt.EditRole:
-            return v
+            return self._converter(index.row()).toOutput(v)
         return core.QVariant()
 
     def setData(self, index, value, role=core.Qt.EditRole):
         self.beginResetModel()
-        self.matrix.setValue(index, value)
+        self.matrix.setValue(index, self._converter(index.row()).fromInput(value))
         self.endResetModel()
         self.dataChanged.emit(index, index)
         return True
@@ -102,28 +155,29 @@ class AttributesDelegate(gui.QStyledItemDelegate):
         self.schema = schema
         self.matrix = tableView.model().matrix
         
-    def _attrs(self):
+    def _attrs(self, index):
         selected = set([])
         for c in range(self.matrix.columnCount):
+            if c == index.column():
+                continue
             a = self.matrix.cellValue(0, c)
-            #print a
             if a:
                 sv = unicode(a)
                 attr = self.schema.attrByName(sv)
-                #print attr.view.source
                 for view in self.schema.relatedViews(attr.view):
-                    #print 'R', view.source
-                    selected = selected | set([view.name+'.'+x for x in view.viewAttrs() ])
+                    selected = selected | set([x.fullName() for x in view.viewAttrs() ])
         if selected:
             print selected
             return list(selected)
         else:
-            return self.schema.attributes()
+            return [a.fullName() for a in self.schema.attributes()]
         
     def createEditor(self, parent, style, index):
         self.initStyleOption(style, index)
         textField = gui.QLineEdit(parent)
-        textField.setCompleter(gui.QCompleter(self._attrs()))
+        completer = gui.QCompleter(self._attrs(index))
+        completer.setCaseSensitivity(core.Qt.CaseInsensitive)
+        textField.setCompleter(completer)
         return textField
         
     def setEditorData(self, editor, index):
@@ -131,7 +185,7 @@ class AttributesDelegate(gui.QStyledItemDelegate):
         editor.setText(value)
     
     def setModelData(self, editor, model, index):
-        model.setData(index, core.QVariant(unicode(editor.text())))
+        model.setData(index, editor.text())
         
 class QtQube(gui.QWidget):
     
@@ -140,7 +194,8 @@ class QtQube(gui.QWidget):
         self.setLayout(gui.QVBoxLayout(self))
         tableView = gui.QTableView()
         self.layout().addWidget(tableView)
-        model = EditorTableModel(schema)
+        matrix = Matrix()
+        model = EditorTableModel(schema, matrix)
         tableView.setModel(model)
         tableView.setItemDelegateForRow(0, AttributesDelegate(schema, tableView))
         tableView.horizontalHeader().setResizeMode(gui.QHeaderView.Stretch)

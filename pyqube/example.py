@@ -37,7 +37,7 @@ def main():
     schema.addView(citiesView, publisherCity)
     
     subBuilder = QueryBuilder(schema)
-    authorAttr = booksView.attribute('author').select(aggregate=aggrCount, altName='Authors')
+    authorAttr = booksView.attribute('author').select(aggregate=lambda a: 'count('+a+')', altName='Authors')
     subBuilder.select(authorAttr)
     
     categoryAttr = categoriesView.attribute('category_name').select(groupBy=True)
@@ -69,8 +69,8 @@ def main():
     schema.addView(subView, authorsPublisher)
     sa = schema.attributes()
     
-    print sa[0], schema.attrByName(sa[0]).view.source
-    print sa[-1], schema.attrByName(sa[-1]).view.source
+    print sa[0], sa[0].view.source
+    print sa[-1], sa[-1].view.source
     
     builder = QueryBuilder(schema)
     builder.select(subView.attribute('Authors').select(condition=orCondition('=')) )
