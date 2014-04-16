@@ -76,6 +76,35 @@ class AttrConverter(ValueConverter):
             return value
         else:
             return None
+            
+class AttrValidator(gui.QValidator):
+    
+    def __init__(self, schema, parent=None):
+        gui.QValidator.__init__(self, parent=parent)
+        self.schema = schema
+        self.viewAttrs = []
+        
+    def validate(self, qtext, pos):
+        text = str(qtext)
+        if not text:
+            return (gui.QValidator.Intermediate, pos)
+        elif '.' in text:
+            if not self.viewAttrs:
+                v =  self.schema.viewByName(text[:text.index('.')])
+                if not v:
+                    return (gui.QValidator.Invalid, pos)
+                else:
+                    self.viewAttrs = [a.realName() for a in v.viewAttrs()]
+            elif len(text) > text.index('.')+1:
+                attr = text[text.index('.')+1:]
+                for a in self.viewAttrs:
+                    if a == attr:
+                        return (gui.QValidator.Acceptable, pos)
+                    elif a.startswith(attr):
+                        return (gui.QValidator.Intermediate, pos)
+        return (gui.QValidator.Intermediate, pos)
+        
+        
         
 class BoolConverter(ValueConverter):
     
@@ -178,6 +207,7 @@ class AttributesDelegate(gui.QStyledItemDelegate):
         completer = gui.QCompleter(self._attrs(index))
         completer.setCaseSensitivity(core.Qt.CaseInsensitive)
         textField.setCompleter(completer)
+        textField.setValidator(AttrValidator(self.schema, textField))
         return textField
         
     def setEditorData(self, editor, index):
