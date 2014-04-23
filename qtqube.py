@@ -123,7 +123,10 @@ class StrConverter(ValueConverter):
         ValueConverter.__init__(self)
         
     def fromInput(self, variant):
-        return str(variant.toString())
+        if isinstance(variant, core.QVariant):
+            return str(variant.toString())
+        elif isinstance(variant, core.QString):
+            return str(variant)
         
     def toOutput(self, value):
         return value 
@@ -191,8 +194,9 @@ class AttributesDelegate(gui.QStyledItemDelegate):
                 continue
             a = self.matrix.cellValue(0, c)
             if a:
-                sv = unicode(a)
+                sv = unicode(a.fullName())
                 attr = self.schema.attrByName(sv)
+                print sv, attr
                 for view in self.schema.relatedViews(attr.view):
                     selected = selected | set([x.fullName() for x in view.viewAttrs() ])
         if selected:
@@ -208,6 +212,7 @@ class AttributesDelegate(gui.QStyledItemDelegate):
         completer.setCaseSensitivity(core.Qt.CaseInsensitive)
         textField.setCompleter(completer)
         textField.setValidator(AttrValidator(self.schema, textField))
+        textField.acceptableInput=True
         return textField
         
     def setEditorData(self, editor, index):
@@ -215,6 +220,51 @@ class AttributesDelegate(gui.QStyledItemDelegate):
         editor.setText(value)
     
     def setModelData(self, editor, model, index):
+        model.setData(index, editor.text())
+        
+class ListDelegate(gui.QStyledItemDelegate):
+
+    def __init__(self, values, tableView):
+        gui.QStyledItemDelegate.__init__(self, parent=tableView)
+        self.setItemEditorFactory(gui.QItemEditorFactory.defaultFactory())
+        self.values = values
+    
+    def createEditor(self, parent, style, index):
+        r = index.row()
+        if r > 3 and r < 7:
+            return self._createLineEditor(parent, style, index, self.values[r])
+        elif r >= 7:
+            return self._createLineEditor(parent, style, index, self.values[6])
+        else:
+            return gui.QStyledItemDelegate.createEditor(self, parent, style, index)
+            
+    def setEditorData(self, editor, index):
+        r = index.row()
+        if r > 3:
+            self._setEditorTextData(editor, index)
+        else:
+            gui.QStyledItemDelegate.setEditorData(self, editor, index)
+            
+    def setModelData(self, editor, model, index):
+        r = index.row()
+        if r > 3:
+            self._setModelTextData(editor, model, index)
+        else:
+            gui.QStyledItemDelegate.setModelData(self, editor, model, index)
+        
+    def _createLineEditor(self, parent, style, index, valuesList):
+        self.initStyleOption(style, index)
+        textField = gui.QLineEdit(parent)
+        completer = gui.QCompleter(valuesList)
+        completer.setCaseSensitivity(core.Qt.CaseInsensitive)
+        textField.setCompleter(completer)
+        return textField
+        
+    def _setEditorTextData(self, editor, index):
+        value = index.data().toString()
+        editor.setText(value)
+    
+    def _setModelTextData(self, editor, model, index):
         model.setData(index, editor.text())
         
 class QtQube(gui.QWidget):
@@ -227,6 +277,7 @@ class QtQube(gui.QWidget):
         matrix = Matrix()
         model = EditorTableModel(schema, matrix)
         tableView.setModel(model)
+        tableView.setItemDelegate(ListDelegate({4:['avg', 'count', 'sum'], 5:['<', '<=', '=', '>=', '>', 'LIKE'], 6:['<', '<=', '=', '>=', '>', 'LIKE']}, tableView))
         tableView.setItemDelegateForRow(0, AttributesDelegate(schema, tableView))
         tableView.horizontalHeader().setResizeMode(gui.QHeaderView.Stretch)
 
