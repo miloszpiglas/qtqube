@@ -4,7 +4,7 @@ from PyQt4 import QtCore as core
 from PyQt4 import QtGui as gui
 from pyqube import pyqube as p
 from pyqube import views as v
-
+from functools import partial
 
 class Matrix(object):
 
@@ -38,8 +38,10 @@ class Matrix(object):
     
     def cellValue(self, r, c):
         column = self._columns.get(c, {})
-        if r in [2, 3]:
+        if r == 2:
             return column.get(r, False)
+        elif r == 3:
+            return column.get(r, True)
         else:
             return column.get(r, None)
     
@@ -272,15 +274,58 @@ class QtQube(gui.QWidget):
     def __init__(self, schema, parent=None):
         gui.QWidget.__init__(self, parent=parent)
         self.setLayout(gui.QVBoxLayout(self))
+        self.schema = schema
         tableView = gui.QTableView()
         self.layout().addWidget(tableView)
-        matrix = Matrix()
-        model = EditorTableModel(schema, matrix)
+        self.matrix = Matrix()
+        model = EditorTableModel(schema, self.matrix)
         tableView.setModel(model)
-        tableView.setItemDelegate(ListDelegate({4:['avg', 'count', 'sum'], 5:['<', '<=', '=', '>=', '>', 'LIKE'], 6:['<', '<=', '=', '>=', '>', 'LIKE']}, tableView))
+        functionNames = ['avg', 'count', 'sum']
+        operators = ['<', '<=', '=', '>=', '>', 'LIKE']
+        tableView.setItemDelegate(ListDelegate({4:functionNames, 5:operators, 6:operators}, tableView))
         tableView.setItemDelegateForRow(0, AttributesDelegate(schema, tableView))
-        tableView.horizontalHeader().setResizeMode(gui.QHeaderView.Stretch)
+        #tableView.horizontalHeader().setResizeMode(gui.QHeaderView.Stretch)
+    
+    def _createConditions(self, column):
+        chain = v.ConditionChain()
+        size = 0
+        for r in range(5, self.matrix.rowCount):
+            operator = self.matrix.cellValue(r, column)
+            if operator:
+                size += 1
+                chain.addOr(operator)
+        if size > 0:
+            return chain.build() 
+        else:
+            return None
+        
+    def getQuery(self):
+        
+        builder = p.QueryBuilder(self.schema)
+        selectAttrs = {}
+        aggrAttrs = []
+        for c in range(self.matrix.columnCount):
+            attr = self.matrix.cellValue(0, c)
+            if attr:
+                visible = self.matrix.cellValue(3, c)
+                sort = self.matrix.cellValue(2, c)
+                conditions = self._createConditions(c)
+                alias = self.matrix.cellValue(1, c)
+                fname = self.matrix.cellValue(4, c)
+                selectAttrs[c] = attr.select(orderBy=sort, visible=visible, condition=conditions, altName=alias)
+                if fname:
+                    selectAttrs[c].aggregate = partial(function, fname)
+                    aggrAttrs.append(c)
+                builder.select(selectAttrs[c])
+        if aggrAttrs:
+            for (i, attr) in selectAttrs.iteritems():
+                if i not in aggrAttrs and attr.visible:
+                    attr.groupBy = True
+        return builder.build()
 
+def function(name, attr):
+    return name+'('+attr+')'
+        
 def createSchema():
     booksView = v.View('books', 'Books', ['title', 'author', 'year', 'publisher', 'category'])
     publishersView = v.View('publishers', 'Publishers', ['id', 'name', 'city'])
@@ -322,9 +367,13 @@ def main():
     app = gui.QApplication(sys.argv)
     dialog = gui.QDialog()
     dialog.setLayout(gui.QVBoxLayout())
-    dialog.layout().addWidget(QtQube(createSchema(), dialog))
+    widget = QtQube(createSchema(), dialog)
+    dialog.layout().addWidget(widget)
     dialog.setMinimumSize(500, 500)
     dialog.exec_()
+    q = widget.getQuery()
+    print q[0]
+    print q[1]
 
 if __name__ == '__main__':
     main()
