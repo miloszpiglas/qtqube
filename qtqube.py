@@ -313,7 +313,7 @@ class QtQube(gui.QWidget):
                 alias = self.matrix.cellValue(1, c)
                 fname = self.matrix.cellValue(4, c)
                 selectAttrs[c] = attr.select(orderBy=sort, visible=visible, condition=conditions, altName=alias)
-                if fname:
+                if fname and visible:
                     selectAttrs[c].aggregate = partial(function, fname)
                     aggrAttrs.append(c)
                 builder.select(selectAttrs[c])
@@ -330,6 +330,7 @@ def createSchema():
     booksView = v.View('books', 'Books', ['title', 'author', 'year', 'publisher', 'category'])
     publishersView = v.View('publishers', 'Publishers', ['id', 'name', 'city'])
     categoriesView = v.View('categories', 'Categories', ['id', 'category_name'])
+    categoriesView.attribute('category_name').userName = 'Category name'
     citiesView = v.View('cities', 'Cities', ['id', 'city_name'])
     
     bookPublisher = v.Relation(
@@ -372,8 +373,9 @@ def main():
     dialog.setMinimumSize(500, 500)
     dialog.exec_()
     q = widget.getQuery()
-    print q[0]
-    print q[1]
+    print q.statement
+    print q.params
+    print q.attributes
 
 if __name__ == '__main__':
     main()
