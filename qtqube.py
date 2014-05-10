@@ -201,6 +201,7 @@ class AttributesDelegate(gui.QStyledItemDelegate):
                 print sv, attr
                 for view in self.schema.relatedViews(attr.view):
                     selected = selected | set([x.fullName() for x in view.viewAttrs() ])
+                selected = selected | set([x.fullName() for x in attr.view.viewAttrs()])
         if selected:
             print selected
             return list(selected)
@@ -289,7 +290,11 @@ class QtQube(gui.QWidget):
     def _createConditions(self, column):
         chain = v.ConditionChain()
         size = 0
-        for r in range(5, self.matrix.rowCount):
+        andOp = self.matrix.cellValue(5, column)
+        if andOp:
+            size += 1
+            chain.addAnd(andOp)
+        for r in range(6, self.matrix.rowCount):
             operator = self.matrix.cellValue(r, column)
             if operator:
                 size += 1
@@ -304,19 +309,29 @@ class QtQube(gui.QWidget):
         builder = p.QueryBuilder(self.schema)
         selectAttrs = {}
         aggrAttrs = []
+        attrCond = {}
+        viewHasCond = {}
+        for c in range(self.matrix.columnCount):
+            attr = self.matrix.cellValue(0, c)
+            if attr:
+                conditions = self._createConditions(c)
+                if conditions:
+                    attrCond[c] = conditions
+                    if not viewHasCond.get(attr.view.name, False):
+                        viewHasCond[attr.view.name] = True
         for c in range(self.matrix.columnCount):
             attr = self.matrix.cellValue(0, c)
             if attr:
                 visible = self.matrix.cellValue(3, c)
                 sort = self.matrix.cellValue(2, c)
-                conditions = self._createConditions(c)
+                conditions = attrCond.get(c, None)
                 alias = self.matrix.cellValue(1, c)
                 fname = self.matrix.cellValue(4, c)
                 selectAttrs[c] = attr.select(orderBy=sort, visible=visible, condition=conditions, altName=alias)
                 if fname and visible:
                     selectAttrs[c].aggregate = partial(function, fname)
                     aggrAttrs.append(c)
-                builder.select(selectAttrs[c])
+                builder.select(selectAttrs[c], outerJoin=(not viewHasCond.get(attr.view.name, False)) )
         if aggrAttrs:
             for (i, attr) in selectAttrs.iteritems():
                 if i not in aggrAttrs and attr.visible:
