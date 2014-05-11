@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 # qtqube
 
 from PyQt4 import QtCore as core
@@ -25,12 +27,10 @@ class Matrix(object):
         column = self._columns.get(c, {})
         column[r] = value
         self._columns[c] = column
-        print self._columns
         if r >= self._rowCount-1:
             self._rowCount += 1
         if c >= self._columnCount-1:
             self._columnCount  += 1
-        print r, self._rowCount, c, self._columnCount
             
     def value(self, index):
         r, c = index.row(), index.column()
@@ -68,8 +68,7 @@ class AttrConverter(ValueConverter):
         self.schema = schema
         
     def fromInput(self, text):
-        print text
-        return self.schema.attrByName(str(text))
+        return self.schema.attrByName(unicode(text))
         
     def toOutput(self, value):
         if value and isinstance(value, v.ViewAttr):
@@ -87,7 +86,7 @@ class AttrValidator(gui.QValidator):
         self.viewAttrs = []
         
     def validate(self, qtext, pos):
-        text = str(qtext)
+        text = unicode(qtext)
         if not text:
             return (gui.QValidator.Intermediate, pos)
         elif '.' in text:
@@ -126,9 +125,9 @@ class StrConverter(ValueConverter):
         
     def fromInput(self, variant):
         if isinstance(variant, core.QVariant):
-            return str(variant.toString())
+            return unicode(variant.toString())
         elif isinstance(variant, core.QString):
-            return str(variant)
+            return unicode(variant)
         
     def toOutput(self, value):
         return value 
@@ -198,12 +197,10 @@ class AttributesDelegate(gui.QStyledItemDelegate):
             if a:
                 sv = unicode(a.fullName())
                 attr = self.schema.attrByName(sv)
-                print sv, attr
                 for view in self.schema.relatedViews(attr.view):
                     selected = selected | set([x.fullName() for x in view.viewAttrs() ])
                 selected = selected | set([x.fullName() for x in attr.view.viewAttrs()])
         if selected:
-            print selected
             return list(selected)
         else:
             return [a.fullName() for a in self.schema.attributes()]
@@ -331,7 +328,7 @@ class QtQube(gui.QWidget):
                 if fname and visible:
                     selectAttrs[c].aggregate = partial(function, fname)
                     aggrAttrs.append(c)
-                builder.select(selectAttrs[c], outerJoin=(not viewHasCond.get(attr.view.name, False)) )
+                builder.add(selectAttrs[c], outerJoin=(not viewHasCond.get(attr.view.name, False)) )
         if aggrAttrs:
             for (i, attr) in selectAttrs.iteritems():
                 if i not in aggrAttrs and attr.visible:
@@ -342,32 +339,32 @@ def function(name, attr):
     return name+'('+attr+')'
         
 def createSchema():
-    booksView = v.View('books', 'Books', ['title', 'author', 'year', 'publisher', 'category'])
+    booksView = v.View('books', u'Books', ['title', 'author', 'year', 'publisher', 'category'])
     publishersView = v.View('publishers', 'Publishers', ['id', 'name', 'city'])
     categoriesView = v.View('categories', 'Categories', ['id', 'category_name'])
-    categoriesView.attribute('category_name').userName = 'Category name'
+    categoriesView['category_name'].userName = 'Category name'
     citiesView = v.View('cities', 'Cities', ['id', 'city_name'])
     
     bookPublisher = v.Relation(
                             [v.AttrPair
-                                (booksView.attribute('publisher'), 
-                                            publishersView.attribute('id')
+                                (booksView['publisher'], 
+                                            publishersView['id']
                                 )
                             ]
                             )
     publisherCity = v.Relation(
                             [v.AttrPair
                                 (
-                                    publishersView.attribute('city'), 
-                                    citiesView.attribute('id')
+                                    publishersView['city'], 
+                                    citiesView['id']
                                 )
                             ]
                             )
     bookCategory = v.Relation(
                            [v.AttrPair
                                 (
-                                    booksView.attribute('category'), 
-                                    categoriesView.attribute('id')
+                                    booksView['category'], 
+                                    categoriesView['id']
                                 )
                             ]
                             )
